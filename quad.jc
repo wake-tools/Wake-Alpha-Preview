@@ -1,0 +1,206 @@
+/*|| https://wake.tools ||                                                           || JIT C | Wake Alpha ||
+  | --------------------------------------------------------------------------------------------------+-+++|>
+  +- Quad GLSL                                                                            || @ Maeiky  ||
+  |---------------------------------------------------------------------------------------------------+-+++|>
+  +- Quad GLSL, draw a simple quad using glsl
+  |
+  |-----|--------|---------------------|-----------------------------|--------------------------------+-+++|>
+   <:jit:>
+      #Jit.add .sm/quad.sm
+      >
+      {wk.module}wake-tools/shdc/SHDC-0.1/shdc-w32-r.exe
+          --input quad.glsl --output .sm/quad.glslh --slang hlsl4
+      >
+      {wk.module}wake-tools/tcc/TCC-1.27/tcc-w32-d.exe
+         -x c
+         -c {this.file}
+
+         -shared
+         -bench
+         -gdwarf-4
+           
+         -L {wk.module}wake-tools/sutil/SUTIL-0.1/    -l sutil-w32-d
+         -L {wk.module}wake-tools/imgui/ImGUI-0.1/    -l imgui-w32-d
+         -L {wk.module}wake-tools/jit/JIT-0.1/        -l jit-w32-d
+         -L {wk.module}wake-tools/sapp/SAPP-0.1/      -l sapp-w32-d
+         -L {wk.module}wake-tools/sgfx/SGFX-0.1/      -l sgfx-w32-d
+         
+         -L {wk.module}wake-tools/tcc/TCC-1.27/lib/    
+       
+         -I {wk.module}wake-tools/tcc/TCC-1.27/lib/include/
+         
+         -I {wk.module}wake-tools/tcc/TCC-1.27/include/
+         -I {wk.module}wake-tools/jit/JIT-0.1/include/
+         
+         -I {wk.module}wake-tools/imgui/ImGUI-0.1/include/
+         -I {wk.module}wake-tools/sapp/SAPP-0.1/include/
+         -I {wk.module}wake-tools/sgfx/SGFX-0.1/include/
+         -I {wk.module}wake-tools/sutil/SUTIL-0.1/include/
+         
+         -I {wk.module}wake-tools/tcc/TCC-1.27/include/winapi/
+          
+      -o {jit.file}
+      >
+      #Jit.reload
+   <:end:>
+  |-----|--------|---------------------|-----------------------------|--------------------------------+-+++|>
+*/
+#include "jit.h"
+
+#define USE_DBG_UI
+#include "sokol.h"
+#include "cimgui.h"
+
+#include ".sm/quad.glslh"
+///
+typedef struct {
+    uint64_t last_time;
+    bool show_test_window;
+    
+    sg_pass_action pass_action;
+    sg_pipeline pip;
+    sg_bindings bind;
+    
+    
+} state_t;
+static state_t state;
+//
+void app_init(void) {
+}
+void app_update(){
+   ImGuiIO* io = igGetIO();
+
+   igText("iTime %lf",  jit_time()  );
+   igText("iResolution %d %d",  sapp_width(),  sapp_height());
+   igText("iMouse %f %f", io->MousePos.x,  io->MousePos.y );
+}
+///
+bool app_open = true;
+void app_frame(int width, int height){
+   //
+   ImGuiWindowFlags window_flags = 0;
+   window_flags =  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration |  ImGuiWindowFlags_NoBringToFrontOnFocus ;
+
+  igSetNextWindowPos((ImVec2){0,0}, ImGuiCond_FirstUseEver, (ImVec2){0,0});
+  igSetNextWindowSize((ImVec2){width,height}, 0);
+  if (app_open&& igBegin("App", &app_open, window_flags)){
+      app_update();
+      igEnd();
+   }
+}
+//
+void init_quad(void) {
+   //
+   // a vertex buffer
+    float vertices[] = {
+        // positions            colors
+        -0.5f,  0.5f, 0.5f,     1.0f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, 0.5f,     0.0f, 1.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, 0.5f,     0.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 0.0f, 1.0f,
+    };
+    state.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){
+        .data = SG_RANGE(vertices),
+        .label = "quad-vertices"
+    });
+    //
+    // an index buffer with 2 triangles
+    uint16_t indices[] = { 0, 1, 2,  0, 2, 3 };
+    state.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .type = SG_BUFFERTYPE_INDEXBUFFER,
+        .data = SG_RANGE(indices),
+        .label = "quad-indices"
+    });
+    //
+    // a shader (use separate shader sources here
+    sg_shader shd = sg_make_shader(quad_shader_desc(sg_query_backend()));
+    //
+    // a pipeline state objec
+    state.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .layout = {
+            .attrs = {
+                [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
+                [ATTR_vs_color0].format   = SG_VERTEXFORMAT_FLOAT4
+            }
+        },
+        .label = "quad-pipeline"
+    });
+}
+//
+void init(void) {
+    sg_setup(&(sg_desc){
+        .environment = sglue_environment(),
+        .logger.func = slog_func,
+    });
+    simgui_setup(&(simgui_desc_t){
+         .logger.func = slog_func,
+    });
+   //
+   state = (state_t) {
+      .show_test_window = false,
+      .pass_action = {
+         .colors[0] = {
+             .load_action = SG_LOADACTION_CLEAR,
+             .clear_value = { 0.0f, 0.0f, 0.0f, 0.0f }
+         }
+      }
+   };
+   //
+   init_quad();
+   app_init();
+}
+//
+void frame(void) {
+   const int width = sapp_width();
+   const int height = sapp_height();
+   simgui_new_frame(&(simgui_frame_desc_t){
+      .width = width,
+      .height = height,
+      .delta_time = sapp_frame_duration(),
+      .dpi_scale = sapp_dpi_scale()
+   });
+   //
+   app_frame(width, height);
+   //
+   sg_begin_pass(&(sg_pass){ .action = state.pass_action, .swapchain = sglue_swapchain() });
+   simgui_render();
+   //
+   sg_apply_pipeline(state.pip);
+   sg_apply_bindings(&state.bind);
+   sg_draw(0, 6, 1);
+   //
+   sg_end_pass();
+   sg_commit();
+}
+//
+void cleanup(void) {
+   simgui_shutdown();
+   sg_shutdown();
+}
+//
+void input(const sapp_event* event) {
+   simgui_handle_event(event);
+}
+//
+int main(int argc, char *argv[]){
+   //
+   sapp_desc desc = (sapp_desc){
+      .init_cb = init,
+      .frame_cb = frame,
+      .event_cb = __cdbgui_event,
+      .cleanup_cb = cleanup,
+      .width                      = 800,
+      .height                     = 600,
+      .swap_interval				    = 1,
+      .window_title               = "- Hello Sokol -",
+      .logger.func = slog_func,
+   };
+   //
+   sapp_run(&desc);
+   #ifndef HAS_ASYNC_LOOP
+   sapp_quit();
+   #endif
+   return 0;
+ }

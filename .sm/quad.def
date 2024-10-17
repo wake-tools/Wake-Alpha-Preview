@@ -1,0 +1,5 @@
+LIBRARY quad.sm
+
+EXPORTS
+jit_main
+jit_request_close

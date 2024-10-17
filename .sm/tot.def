@@ -1,0 +1,5 @@
+LIBRARY tot.sm
+
+EXPORTS
+jit_main
+jit_request_close
