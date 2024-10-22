@@ -234,7 +234,7 @@ void input(const sapp_event* event) {
 }
 //
 int main(int argc, char *argv[]){ 
-   //wsapp_set_create_window_style( WS_EX_NOREDIRECTIONBITMAP| WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,   WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP);
+   wsapp_set_create_window_style( WS_EX_NOREDIRECTIONBITMAP| WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,   WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP);
    //
    sapp_desc desc = (sapp_desc){
       .init_cb = init,

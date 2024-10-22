@@ -38,7 +38,9 @@ out vec4 frag_color;
 ///==!FRAGEMENT!== SHADERTOY IMPL
 ///============================================================================================
 ///--------------------------------------------------------------------------------------------
-   /*
+  
+//!Start
+  /*
 #define cor(a) (cos(a * 6.3 + vec4(0, 23, 21, 0)) * 0.5 + 0.5)
 #define rot(a) mat2(cos(a + vec4(0, 11, 33, 0)))
 
@@ -1170,7 +1172,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     fragColor = vec4(col,1.0);
 }
 */
-
+/*
 //https://www.shadertoy.com/view/l3sfzs
 
 #define Rot(a) mat2(cos(a),-sin(a),sin(a),cos(a))
@@ -1792,7 +1794,280 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     col = drawTex(uv,col);
     fragColor = vec4(col,1.0);
 }
+*/
 
+/*
+
+
+// --------------------------------------------------------
+// HG_SDF
+// https://www.shadertoy.com/view/Xs3GRB
+// --------------------------------------------------------
+
+#define PI 3.14159265359
+
+void pR(inout vec2 p, float a) {
+    p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
+}
+
+float smax(float a, float b, float r) {
+    vec2 u = max(vec2(r + a,r + b), vec2(0));
+    return min(-r, max (a, b)) + length(u);
+}
+
+
+// --------------------------------------------------------
+// Spectrum colour palette
+// IQ https://www.shadertoy.com/view/ll2GD3
+// --------------------------------------------------------
+
+vec3 pal( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d ) {
+    return a + b*cos( 6.28318*(c*t+d) );
+}
+
+vec3 spectrum(float n) {
+    return pal( n, vec3(0.5,0.5,0.5),vec3(0.5,0.5,0.5),vec3(1.0,1.0,1.0),vec3(0.0,0.33,0.67) );
+}
+
+
+// --------------------------------------------------------
+// Main SDF
+// https://www.shadertoy.com/view/wsfGDS
+// --------------------------------------------------------
+
+vec4 inverseStereographic(vec3 p, out float k) {
+    k = 2.0/(1.0+dot(p,p));
+    return vec4(k*p,k-1.0);
+}
+
+float fTorus(vec4 p4) {
+    float d1 = length(p4.xy) / length(p4.zw) - 1.;
+    float d2 = length(p4.zw) / length(p4.xy) - 1.;
+    float d = d1 < 0. ? -d1 : d2;
+    d /= PI;
+    return d;
+}
+
+float fixDistance(float d, float k) {
+    float sn = sign(d);
+    d = abs(d);
+    d = d / k * 1.82;
+    d += 1.;
+    d = pow(d, .5);
+    d -= 1.;
+    d *= 5./3.;
+    d *= sn;
+    return d;
+}
+
+float time;
+
+float map(vec3 p) {
+    float k;
+    vec4 p4 = inverseStereographic(p,k);
+
+    pR(p4.zy, time * -PI / 2.);
+    pR(p4.xw, time * -PI / 2.);
+
+    // A thick walled clifford torus intersected with a sphere
+
+    float d = fTorus(p4);
+    d = abs(d);
+    d -= .2;
+    d = fixDistance(d, k);
+    d = smax(d, length(p) - 1.85, .2);
+
+    return d;
+}
+
+
+// --------------------------------------------------------
+// Rendering
+// --------------------------------------------------------
+
+mat3 calcLookAtMatrix(vec3 ro, vec3 ta, vec3 up) {
+    vec3 ww = normalize(ta - ro);
+    vec3 uu = normalize(cross(ww,up));
+    vec3 vv = normalize(cross(uu,ww));
+    return mat3(uu, vv, ww);
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+
+    time = mod(iTime / 2., 1.);
+
+    vec3 camPos = vec3(1.8, 5.5, -5.5) * 1.75;
+    vec3 camTar = vec3(.0,0,.0);
+    vec3 camUp = vec3(-1,0,-1.5);
+    mat3 camMat = calcLookAtMatrix(camPos, camTar, camUp);
+    float focalLength = 5.;
+    vec2 p = (-iResolution.xy + 2. * gl_FragCoord.xy) / iResolution.y;
+
+    vec3 rayDirection = normalize(camMat * vec3(p, focalLength));
+    vec3 rayPosition = camPos;
+    float rayLength = 0.;
+
+    float distance = 0.;
+    vec3 color = vec3(0);
+
+    vec3 c;
+
+    // Keep iteration count too low to pass through entire model,
+    // giving the effect of fogged glass
+    const float ITER = 82.;
+    const float FUDGE_FACTORR = .8;
+    const float INTERSECTION_PRECISION = .001;
+    const float MAX_DIST = 20.;
+
+    for (float i = 0.; i < ITER; i++) {
+
+        // Step a little slower so we can accumilate glow
+        rayLength += max(INTERSECTION_PRECISION, abs(distance) * FUDGE_FACTORR);
+        rayPosition = camPos + rayDirection * rayLength;
+        distance = map(rayPosition);
+
+        // Add a lot of light when we're really close to the surface
+        c = vec3(max(0., .01 - abs(distance)) * .5);
+        c *= vec3(1.4,2.1,1.7); // blue green tint
+
+        // Accumilate some purple glow for every step
+        c += vec3(.6,.25,.7) * FUDGE_FACTORR / 160.;
+        c *= smoothstep(20., 7., length(rayPosition));
+
+        // Fade out further away from the camera
+        float rl = smoothstep(MAX_DIST, .1, rayLength);
+        c *= rl;
+
+        // Vary colour as we move through space
+        c *= spectrum(rl * 6. - .6);
+
+        color += c;
+
+        if (rayLength > MAX_DIST) {
+            break;
+        }
+    }
+
+    // Tonemapping and gamma
+    color = pow(color, vec3(1. / 1.8)) * 2.;
+    color = pow(color, vec3(2.)) * 3.;
+    color = pow(color, vec3(1. / 2.2));
+
+    fragColor = vec4(color, 1);
+}
+*/
+
+/*
+* License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+* Created by bal-khan
+*/
+/*
+* License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+* Created by bal-khan
+*/
+precision highp float;
+
+
+float gTime = 0.;
+const float REPEAT = 5.0;
+
+// 回転行列
+mat2 rot(float a) {
+	float c = cos(a), s = sin(a);
+	return mat2(c,s,-s,c);
+}
+
+float sdBox( vec3 p, vec3 b )
+{
+	vec3 q = abs(p) - b;
+	return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float box(vec3 pos, float scale) {
+	pos *= scale;
+	float base = sdBox(pos, vec3(.4,.4,.1)) /1.5;
+	pos.xy *= 5.;
+	pos.y -= 3.5;
+	pos.xy *= rot(.75);
+	float result = -base;
+	return result;
+}
+
+float box_set(vec3 pos, float iTime) {
+	vec3 pos_origin = pos;
+	pos = pos_origin;
+	pos .y += sin(gTime * 0.4) * 2.5;
+	pos.xy *=   rot(.8);
+	float box1 = box(pos,2. - abs(sin(gTime * 0.4)) * 1.5);
+	pos = pos_origin;
+	pos .y -=sin(gTime * 0.4) * 2.5;
+	pos.xy *=   rot(.8);
+	float box2 = box(pos,2. - abs(sin(gTime * 0.4)) * 1.5);
+	pos = pos_origin;
+	pos .x +=sin(gTime * 0.4) * 2.5;
+	pos.xy *=   rot(.8);
+	float box3 = box(pos,2. - abs(sin(gTime * 0.4)) * 1.5);	
+	pos = pos_origin;
+	pos .x -=sin(gTime * 0.4) * 2.5;
+	pos.xy *=   rot(.8);
+	float box4 = box(pos,2. - abs(sin(gTime * 0.4)) * 1.5);	
+	pos = pos_origin;
+	pos.xy *=   rot(.8);
+	float box5 = box(pos,.5) * 6.;	
+	pos = pos_origin;
+	float box6 = box(pos,.5) * 6.;	
+	float result = max(max(max(max(max(box1,box2),box3),box4),box5),box6);
+	return result;
+}
+
+float map(vec3 pos, float iTime) {
+	vec3 pos_origin = pos;
+	float box_set1 = box_set(pos, iTime);
+
+	return box_set1;
+}
+
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
+	vec2 p = (fragCoord.xy * 2. - iResolution.xy) / min(iResolution.x, iResolution.y);
+	vec3 ro = vec3(0., -0.2 ,iTime * 4.);
+	vec3 ray = normalize(vec3(p, 1.5));
+	ray.xy = ray.xy * rot(sin(iTime * .03) * 5.);
+	ray.yz = ray.yz * rot(sin(iTime * .05) * .2);
+	float t = 0.1;
+	vec3 col = vec3(0.);
+	float ac = 0.0;
+
+
+	for (int i = 0; i < 99; i++){
+		vec3 pos = ro + ray * t;
+		pos = mod(pos-2., 4.) -2.;
+		gTime = iTime -float(i) * 0.01;
+		
+		float d = map(pos, iTime);
+
+		d = max(abs(d), 0.01);
+		ac += exp(-d*23.);
+
+		t += d* 0.55;
+	}
+
+	col = vec3(ac * 0.02);
+
+	col +=vec3(0.,0.2 * abs(sin(iTime)),0.5 + sin(iTime) * 0.2);
+
+
+	fragColor = vec4(col ,1.0 - t * (0.02 + 0.02 * sin (iTime)));
+}
+
+/** SHADERDATA
+{
+	"title": "Octgrams",
+	"description": "Lorem ipsum dolor",
+	"model": "person"
+}
+*/
+//!END
 //
 ///--------------------------------------------------------------------------------------------
 ///--------------------------------------------------------------------------------------------
@@ -1807,8 +2082,8 @@ void main() {
     frag_color.a = length(frag_color.xyz);
     //if(pos.x > 0.8){frag_color=vec4(0);}
     
-    frag_color.b*=0; 
-    frag_color.g*=0.3; 
+    //frag_color.b*=0; 
+    //frag_color.g*=0.3; 
 }
 @end
 //   
