@@ -5,14 +5,6 @@
   +- Shadertoy like using:
   |    uniform vec3 iResolution;
   |    uniform float iTime;
-  |    uniform float iTimeDelta;
-  |    uniform float iFrame;
-  |    uniform float iChannelTime[4];
-  |    uniform vec4 iMouse;
-  |    uniform vec4 iDate;
-  |    uniform float iSampleRate;
-  |    uniform vec3 iChannelResolution[4];
-  |    uniform samplerXX iChanneli;
   |
   |-----|--------|---------------------|-----------------------------|--------------------------------+-+++|>
    <:jit:>
@@ -112,13 +104,17 @@ void app_update(){
 }
 ///
 void reflect_keyboard(){
+   static bool on=false;
    for (int key = 1; key <= 255; key++) {
-      if (GetAsyncKeyState(key) & 0x8000) {
+       int keyState = GetAsyncKeyState(key);
+       if (key==27 && keyState & 0x0001)  on=false;
+       if (keyState & 0x8000) {
          igText("-------------------" );
          igText("|| reflect vk %d ||", key);
          igText("-------------------" );
-         if(key==27){
-            sapp_quit();
+         if(key==27 && !on){on=true;
+            sapp_toggle_fullscreen();
+            
          }
       }
    }
@@ -238,15 +234,15 @@ void input(const sapp_event* event) {
 }
 //
 int main(int argc, char *argv[]){ 
-    wsapp_set_create_window_style( WS_EX_NOREDIRECTIONBITMAP| WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,   WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP);
+   //wsapp_set_create_window_style( WS_EX_NOREDIRECTIONBITMAP| WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,   WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP);
    //
    sapp_desc desc = (sapp_desc){
       .init_cb = init,
       .frame_cb = frame,
       .event_cb = __cdbgui_event,
       .cleanup_cb = cleanup,
-      .width                      = 800,
-      .height                     = 600,
+      .width                      = 1000,
+      .height                     = 900,
       .swap_interval				    = 1,
       .window_title               = "- Hello Shader -",
       .logger.func = slog_func,
