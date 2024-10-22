@@ -8,6 +8,8 @@
    <:jit:>
       #Jit.add .sm/quad.sm
       >
+      #Jit.depends quad.glsl
+      >
       {wk.module}wake-tools/shdc/SHDC-0.1/shdc-w32-r.exe
           --input quad.glsl --output .sm/quad.glslh --slang hlsl4
       >
@@ -192,15 +194,16 @@ int main(int argc, char *argv[]){
       .event_cb = __cdbgui_event,
       .cleanup_cb = cleanup,
       .width                      = 800,
-      .height                     = 600,
+      .height                     = 10,
       .swap_interval				    = 1,
       .window_title               = "- Hello Sokol -",
       .logger.func = slog_func,
    };
    //
-   sapp_run(&desc);
+   sapp_run(&desc); 
    #ifndef HAS_ASYNC_LOOP
    sapp_quit();
    #endif
-   return 0;
- }
+   return 0;    
+ }         
+                                 

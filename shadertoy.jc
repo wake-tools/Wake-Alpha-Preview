@@ -66,6 +66,9 @@
    
 #include ".sm/shadertoy.glslh"
 ///
+#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
+#include <windows.h>
+//
 fs_params_t sh_params;
 ///
 typedef struct {
@@ -87,9 +90,14 @@ void app_update(){
    ImGuiStyle* style                 = igGetStyle();
    style->Colors[ImGuiCol_WindowBg].w = 0.2; 
 
-   igText("iTime %lf",  jit_time()  );
+   igText("iTime %.2f",  jit_time()  );
    igText("iResolution %d %d",  sapp_width(),  sapp_height());
-   igText("iMouse %f %f", io->MousePos.x,  io->MousePos.y );
+   if(io->MousePos.x>0)igText("iMouse %.f %.f", io->MousePos.x,  io->MousePos.y );
+   
+      igText("----------------------------------" );
+      igText("----Welcome to my JIT editor --" );
+       igText("----------------------------------" );
+      
    
    sh_params.iMouse[0]=       io->MousePos.x;
    sh_params.iMouse[1]=       io->MousePos.y;
@@ -103,16 +111,30 @@ void app_update(){
 
 }
 ///
+void reflect_keyboard(){
+   for (int key = 1; key <= 255; key++) {
+      if (GetAsyncKeyState(key) & 0x8000) {
+         igText("-------------------" );
+         igText("|| reflect vk %d ||", key);
+         igText("-------------------" );
+         if(key==27){
+            sapp_quit();
+         }
+      }
+   }
+} 
+//
 bool app_open = true;
 void app_frame(int width, int height){
    //
    ImGuiWindowFlags window_flags = 0;
    window_flags =  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration |  ImGuiWindowFlags_NoBringToFrontOnFocus;
 
-  igSetNextWindowPos((ImVec2){0,0}, ImGuiCond_FirstUseEver, (ImVec2){0,0});
-  igSetNextWindowSize((ImVec2){width,height}, 0);
-  if (app_open&& igBegin("App", &app_open, window_flags)){
+   igSetNextWindowPos((ImVec2){0,0}, ImGuiCond_FirstUseEver, (ImVec2){0,0});
+   igSetNextWindowSize((ImVec2){width,height}, 0);
+   if (app_open&& igBegin("App", &app_open, window_flags)){
       app_update();
+      reflect_keyboard();
       igEnd();
    }
 }
@@ -121,11 +143,11 @@ void init_quad(void) {
    //
    // a vertex buffer
     float vertices[] = {
-        // positions            colors
-        -1.0f,  1.0f, 1.0f,     1.0f, 0.0f, 0.0f, 1.0f,
-         1.0f,  1.0f, 1.0f,     0.0f, 0.0f, 0.0f, 1.0f,
-         1.0f, -1.0f, 1.0f,     0.0f, 1.0f, 0.0f, 1.0f,
-        -1.0f, -1.0f, 1.0f,     1.0f, 1.0f, 0.0f, 1.0f,
+        // positions        
+        -1.0f,  1.0f, 1.0f, 
+         1.0f,  1.0f, 1.0f, 
+         1.0f, -1.0f, 1.0f, 
+        -1.0f, -1.0f, 1.0f, 
     };
     state.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){
         .data = SG_RANGE(vertices),
@@ -150,7 +172,6 @@ void init_quad(void) {
         .layout = {
             .attrs = {
                 [ATTR_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-                [ATTR_vs_color0].format   = SG_VERTEXFORMAT_FLOAT4
             }
         },
         .label = "quad-pipeline"
@@ -196,7 +217,6 @@ void frame(void) {
    //
    sg_apply_pipeline(state.pip);
    sg_apply_bindings(&state.bind);
-   //sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_sh_params, &(sg_range){&sh_params, sizeof(sh_params)});
    sg_apply_uniforms(SG_SHADERSTAGE_FS, SLOT_fs_params, &(sg_range){&sh_params, sizeof(sh_params)});
    sg_draw(0, 6, 1);
    //
@@ -204,6 +224,8 @@ void frame(void) {
    //
    sg_end_pass();
    sg_commit();
+   //
+   if(jit_request_close) sapp_quit();
 }
 //
 void cleanup(void) {
@@ -216,6 +238,7 @@ void input(const sapp_event* event) {
 }
 //
 int main(int argc, char *argv[]){ 
+    wsapp_set_create_window_style( WS_EX_NOREDIRECTIONBITMAP| WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,   WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_POPUP);
    //
    sapp_desc desc = (sapp_desc){
       .init_cb = init,
@@ -227,6 +250,7 @@ int main(int argc, char *argv[]){
       .swap_interval				    = 1,
       .window_title               = "- Hello Shader -",
       .logger.func = slog_func,
+      .fullscreen=true,
    };
    //
    sapp_run(&desc);
